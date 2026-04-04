@@ -1,0 +1,16 @@
+{
+  "min_gain_pct": 7.0,
+  "pre_filter_gain_pct": 5.0,
+  "near_limit_up_pct": 9.5,
+  "capital_min_ntd": 1000000000,
+  "capital_max_ntd": 5000000000,
+  "volume_multiplier": 2.0,
+  "ma_short": 5,
+  "ma_mid": 10,
+  "ma_long": 20,
+  "boll_window": 20,
+  "boll_std_mult": 2.0,
+  "max_day_trade_ratio": 0.6,
+  "include_tpex": false,
+  "min_history_days": 22
+}
