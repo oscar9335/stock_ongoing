@@ -152,6 +152,15 @@ def generate_chart(summary: BacktestSummary, output_path: str) -> bool:
     except ImportError:
         return False
 
+    # 設定中文字型，避免亂碼
+    from matplotlib import font_manager
+    _zh_fonts = ["Microsoft JhengHei", "Microsoft YaHei", "SimHei", "PingFang TC", "Noto Sans CJK TC"]
+    _available = {f.name for f in font_manager.fontManager.ttflist}
+    _chosen = next((f for f in _zh_fonts if f in _available), None)
+    if _chosen:
+        matplotlib.rcParams["font.family"] = _chosen
+    matplotlib.rcParams["axes.unicode_minus"] = False  # 修正負號顯示
+
     # 整理資料
     dates = []
     portfolio_values = []
