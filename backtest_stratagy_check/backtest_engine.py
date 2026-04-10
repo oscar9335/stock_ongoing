@@ -228,6 +228,10 @@ def _simulate_trade(
         sell_open:    出場日開盤價
         trading_cfg:  交易策略參數 dict
     """
+    # 漲停鎖死過濾：鎖死股票收盤時無賣單，現實中無法買入
+    if trading_cfg.get("bt_skip_locked", True) and result.get("漲停狀態") == "LOCKED":
+        return None
+
     buy_price = result["收盤價"]
     commission = trading_cfg["bt_commission_rate"] * trading_cfg["bt_commission_discount"]
     tax = trading_cfg["bt_tax_rate"]
@@ -411,6 +415,10 @@ def run_backtest(
                 sell_open=sell_open,
                 trading_cfg=trading_cfg,
             )
+
+            if trade is None:
+                logger.debug("%s %s 漲停鎖死，跳過買入", today, code)
+                continue
 
             if trade.zhang > 0:
                 trades.append(trade)

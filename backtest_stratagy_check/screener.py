@@ -293,7 +293,8 @@ def build_result(
 
     # ---- 評分（僅供排序）----
     score = gain_pct  # 基礎分：漲幅
-    if limit_status == "LOCKED":
+    # 漲停鎖死時若開啟 bt_skip_locked，鎖死股票終究會被過濾掉，不應給加分
+    if limit_status == "LOCKED" and not cfg.get("bt_skip_locked", True):
         score += 8.0
     elif limit_status == "NEAR_LIMIT":
         score += 4.0

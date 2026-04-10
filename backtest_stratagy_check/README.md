@@ -49,6 +49,7 @@ python backtest_main.py --skip-fetch
 | **證交稅** | 賣出時 0.3% |
 | **停損** | 若隔日開盤 < 買入價 × (1 + stop\_loss\_pct)，損失已反映在開盤賣出價 |
 | **無訊號日** | 篩選器無候選股時，當日不交易，資金保留 |
+| **漲停鎖死** | 收盤時「漲停鎖死」的股票預設**跳過不買**（收盤前無賣單，現實無法成交） |
 
 ---
 
@@ -98,7 +99,8 @@ python backtest_main.py --skip-fetch
   "bt_commission_discount": 1.0,
   "bt_tax_rate": 0.003,
   "bt_stop_loss_pct": -0.01,
-  "bt_months": 3
+  "bt_months": 3,
+  "bt_skip_locked": true
 }
 ```
 
@@ -111,6 +113,7 @@ python backtest_main.py --skip-fetch
 | `bt_tax_rate` | 證交稅（賣出），0.003 = 0.3% |
 | `bt_stop_loss_pct` | 停損觸發跌幅，-0.01 = 平盤下 1% |
 | `bt_months` | 未指定 `--start` 時，預設往回幾個月 |
+| `bt_skip_locked` | `true`（預設）= 跳過漲停鎖死股票；`false` = 還原舊行為允許買入 |
 
 ---
 
@@ -146,6 +149,8 @@ python backtest_main.py --skip-fetch
   --commission-discount 手續費折扣
   --tax-rate            證交稅率
   --stop-loss           停損跌幅（負值，e.g. --stop-loss -0.02）
+  --skip-locked         跳過漲停鎖死股票（預設行為）
+  --no-skip-locked      允許買入漲停鎖死股票（還原舊行為，回測結果偏樂觀）
 ```
 
 ---
@@ -189,6 +194,70 @@ python backtest_main.py --skip-fetch
 雙子圖：
 - 上圖：資金餘額折線圖（含初始資金基準線、最高/最低點標記）
 - 下圖：每日損益長條圖（正值=綠、負值=紅）
+
+---
+
+## Grid Search 參數最佳化
+
+對多組參數組合進行系統性回測，找出最佳策略設定。
+
+### 安裝額外套件
+
+```bash
+python -m pip install plotly
+```
+
+### 執行方式
+
+```bash
+# 自動從 cache 推斷回測日期（推薦）
+python grid_search.py
+
+# 指定日期（cache 必須覆蓋該區間，且 start 前有 ≥ 20 個交易日的 MA 計算資料）
+python grid_search.py --start 2026-01-01 --end 2026-04-03
+
+# 完整網格（加入 max_day_trade_ratio，約 480 組，耗時較長）
+python grid_search.py --full-grid
+```
+
+### 搜尋參數
+
+| 參數 | 搜尋值 | 預設值 |
+|------|--------|--------|
+| `min_gain_pct`（最低漲幅%） | 5.0, 6.0, 7.0, 8.0, 9.0 | 7.0 |
+| `volume_multiplier`（量比門檻） | 1.5, 2.0, 2.5, 3.0 | 2.0 |
+| `bt_top_n`（每日最多持股數） | 1, 2, 3, 5 | 3 |
+| `bt_skip_locked`（跳過漲停鎖死） | True, False | True |
+| `max_day_trade_ratio`（--full-grid 才啟用） | 0.4, 0.6, 0.8 | 0.6 |
+
+**預設組合數：** 5×4×4×2 = **160 組**（約 5~15 分鐘）
+**完整組合數：** 160×3 = **480 組**（約 20~40 分鐘）
+
+> Grid search 直接讀取 cache，不進行 API 下載，請確認已先執行 `backtest_main.py` 完成資料下載。
+
+### 輸出目錄結構
+
+```
+grid_search_20260410_143052/
+├── results/
+│   └── results_20260410_143052.csv   ← 全量指標（160 筆，依損益率排序）
+├── summary.txt                       ← 文字摘要報告
+├── equity_curves.json                ← 每個組合的逐日資金曲線
+└── report.html                       ← Plotly 互動式圖表（瀏覽器開啟）
+```
+
+### 報告內容
+
+**`summary.txt`：**
+- Top 10 最佳參數組合（損益率、勝率、最大回撤、交易次數）
+- 單一參數敏感度分析：各參數值的平均/最佳損益率
+
+**`report.html`（互動式）：**
+- Top 10 組合資金曲線（hover 查看詳情，點擊 legend 開/關）
+- 各參數敏感度長條圖（dropdown 切換「平均損益率 / 最佳損益率 / 平均勝率」）
+
+**`results/results_*.csv`：**
+- 全量 160+ 筆結果，可用 Excel 自行篩選特定參數組合做進階分析
 
 ---
 
@@ -257,3 +326,6 @@ A: 確認 matplotlib 已安裝：`python -m pip install matplotlib`
 
 **Q: 想模擬有手續費折扣的情況（例如券商優惠 6 折）？**
 A: 在 `settings.json` 設定 `"bt_commission_discount": 0.6`，或執行時加 `--commission-discount 0.6`。
+
+**Q: 為什麼報告中有 🔒 標記的股票不見了？**
+A: 🔒 代表「漲停鎖死」，預設會跳過不買（`bt_skip_locked: true`）。這是為了讓回測更符合現實——漲停鎖死時收盤前幾乎沒有賣單，實際上無法成交。若要還原舊行為，執行時加 `--no-skip-locked`，或在 `settings.json` 設定 `"bt_skip_locked": false`。

@@ -56,6 +56,7 @@ _DEFAULT_SETTINGS = {
     "bt_stop_loss_pct":     config.BT_STOP_LOSS_PCT,
     "bt_months":            config.BT_MONTHS,
     "min_history_days":     config.MIN_HISTORY_DAYS,
+    "bt_skip_locked":       config.BT_SKIP_LOCKED,
 }
 
 
@@ -134,6 +135,13 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--tax-rate",            type=float, help="證交稅率（預設：0.003）")
     p.add_argument("--stop-loss",           type=float, help="停損觸發跌幅，負值（預設：-0.01）")
 
+    # 漲停鎖死過濾開關
+    skip_locked_group = p.add_mutually_exclusive_group()
+    skip_locked_group.add_argument("--skip-locked",    dest="bt_skip_locked", action="store_true",
+                                   default=None, help="跳過漲停鎖死股票（預設行為，回測更符合現實）")
+    skip_locked_group.add_argument("--no-skip-locked", dest="bt_skip_locked", action="store_false",
+                                   help="允許買入漲停鎖死股票（還原舊行為）")
+
     return p.parse_args()
 
 
@@ -161,6 +169,9 @@ def apply_cli_overrides(cfg: Dict, args: argparse.Namespace) -> Dict:
     for key, val in overrides.items():
         if val is not None:
             cfg[key] = val
+    # bt_skip_locked 是 bool，不能用 None 檢查，需單獨處理
+    if args.bt_skip_locked is not None:
+        cfg["bt_skip_locked"] = args.bt_skip_locked
     return cfg
 
 

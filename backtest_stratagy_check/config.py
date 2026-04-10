@@ -125,3 +125,6 @@ BT_STOP_LOSS_PCT = -0.01
 
 # 預設回測月數（未指定日期時向前推算）
 BT_MONTHS = 3
+
+# 是否跳過「漲停鎖死」股票（True = 更符合現實，無法買到鎖死股票）
+BT_SKIP_LOCKED = True
