@@ -39,6 +39,7 @@ class TradeRecord:
     pnl_pct: float         # 損益率 %（相對 cost）
     limit_up_status: str   # LOCKED / NEAR_LIMIT / NORMAL
     score: float           # 選股評分
+    buy_gain_pct: float = 0.0  # 訊號日漲幅 %（基於前日收盤計算）
 
 
 @dataclass
@@ -263,6 +264,7 @@ def _simulate_trade(
         pnl_pct=round(pnl_pct, 2),
         limit_up_status=result.get("漲停狀態", ""),
         score=result.get("評分", 0.0),
+        buy_gain_pct=result.get("漲幅(%)", 0.0),
     )
 
 

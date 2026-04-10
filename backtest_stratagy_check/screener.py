@@ -73,28 +73,59 @@ def compute_volume_ratio(
     return round(today_vol / avg, 2)
 
 
+def _twse_tick_size(price: float) -> float:
+    """TWSE 股票報價最小跳動單位（依價格區間）。"""
+    if price < 10:
+        return 0.01
+    if price < 50:
+        return 0.05
+    if price < 100:
+        return 0.1
+    if price < 500:
+        return 0.5
+    if price < 1000:
+        return 1.0
+    return 5.0
+
+
+def _twse_limit_up_price(prev_close: float) -> float:
+    """計算 TWSE 漲停板價格（前日收盤 × 1.1，依 tick 向下取整）。"""
+    import math as _math
+    tick = _twse_tick_size(prev_close)
+    return _math.floor(prev_close * 1.1 / tick) * tick
+
+
 def detect_limit_up(
     gain_pct: float,
     close: Optional[float] = None,
     next_limit_up: Optional[float] = None,
     last_ask_vol: Optional[float] = None,
-    near_limit_pct: float = 9.5
+    near_limit_pct: float = 9.5,
+    prev_close: Optional[float] = None,
 ) -> str:
     """
     判斷漲停狀態。
 
     Returns:
-        'LOCKED'     — 確定鎖漲停（TPEX 有額外資訊確認）
-        'NEAR_LIMIT' — 接近漲停（漲幅 >= near_limit_pct）
+        'LOCKED'     — 確定鎖漲停
+        'NEAR_LIMIT' — 接近漲停（漲幅 >= near_limit_pct，但未確認鎖死）
         'NORMAL'     — 普通上漲
     """
     if gain_pct < near_limit_pct:
         return "NORMAL"
 
-    # TPEX 有次日漲停價與最後揭示賣量，可較精確判定
+    # ── TPEX：有次日漲停價與最後揭示賣量，可精確判定 ──────────
     if next_limit_up is not None and close is not None:
         today_limit = round(next_limit_up / 1.1, 2)
         if abs(close - today_limit) < 0.1 and last_ask_vol is not None and last_ask_vol > 0:
+            return "LOCKED"
+
+    # ── TWSE：用前日收盤推算漲停板，比對收盤價 ────────────────
+    # prev_close 由 data_fetcher 計算（= close - change），精確可靠
+    if prev_close is not None and prev_close > 0 and close is not None:
+        limit_price = _twse_limit_up_price(prev_close)
+        tick = _twse_tick_size(prev_close)
+        if abs(close - limit_price) < tick * 0.5:
             return "LOCKED"
 
     return "NEAR_LIMIT"
@@ -228,6 +259,7 @@ def build_result(
         next_limit_up=stock.get("next_limit_up"),
         last_ask_vol=stock.get("last_ask_vol"),
         near_limit_pct=cfg["near_limit_up_pct"],
+        prev_close=stock.get("prev_close"),   # TWSE 漲停板計算用
     )
 
     # ---- 歷史資料整理 ----

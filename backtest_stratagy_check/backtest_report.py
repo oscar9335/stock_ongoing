@@ -115,7 +115,9 @@ def generate_text_report(summary: BacktestSummary) -> str:
             pnl_str = _fmt_ntd(t.pnl)
             pct_str = _fmt_pct(t.pnl_pct)
             status_icon = "🔒" if t.limit_up_status == "LOCKED" else ("⬆" if t.limit_up_status == "NEAR_LIMIT" else " ")
+            gain_str = _fmt_pct(t.buy_gain_pct) if t.buy_gain_pct else ""
             w(f"  {status_icon} {t.code} {t.name:<6} "
+              f"訊號漲幅{gain_str}  "
               f"{t.zhang}張@{t.buy_price:.1f} → 隔日開盤 {t.sell_price:.1f}  "
               f"{pnl_str} NTD ({pct_str})\n")
 
