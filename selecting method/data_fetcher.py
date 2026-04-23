@@ -315,13 +315,15 @@ def fetch_institutional_investors(date_str: str | None = None) -> FetchResult:
     GET https://www.twse.com.tw/rwd/zh/fund/T86?response=json&date=YYYYMMDD&selectType=ALL
     回傳三大法人各股淨買超資料。
     日期採民國年轉換；失敗時 fallback 爬蟲。
+    www.twse.com.tw 可能被防火牆封鎖，故只重試 1 次以快速失敗。
     """
     if date_str is None:
         date_str = get_last_trading_day()
 
     try:
         params = {"response": "json", "date": date_str, "selectType": "ALL"}
-        resp = _retry_request(ENDPOINTS["institutional_json"], params=params)
+        # max_retries=1：www.twse.com.tw 若逾時則立即 fallback，不浪費時間
+        resp = _retry_request(ENDPOINTS["institutional_json"], params=params, max_retries=1)
         if not _is_json_response(resp):
             raise ValueError("回傳 HTML，非 JSON（可能維護中）")
 
@@ -412,7 +414,8 @@ def fetch_institutional_scrape(date_str: str | None = None) -> FetchResult:
 
     try:
         params = {"date": date_str, "selectType": "ALL"}
-        resp = _retry_request(ENDPOINTS["institutional_html"], params=params)
+        # 同樣只重試 1 次；若環境封鎖 www.twse.com.tw 則直接回傳空結果
+        resp = _retry_request(ENDPOINTS["institutional_html"], params=params, max_retries=1)
         soup = BeautifulSoup(resp.text, "lxml")
         df   = _parse_twse_table(soup, table_index=0)
         if df.empty:

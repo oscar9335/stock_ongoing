@@ -91,10 +91,11 @@ def load_historical_data(tickers: tuple[str, ...], period: str = "1y") -> dict[s
 
 
 def _all_tickers(stocks_df: pd.DataFrame) -> tuple[str, ...]:
-    """收集所有需要歷史資料的 ticker（個股 + 概念股）。"""
+    """
+    只收集概念股 ticker（約 15 支），避免下載全市場 1500+ 支個股導致頁面卡住。
+    動能/階段分析以概念股為主；官方類股的漲跌幅改用 MI_INDEX 類股指數。
+    """
     codes: set[str] = set()
-    if not stocks_df.empty and "code" in stocks_df.columns:
-        codes.update(stocks_df["code"].astype(str).tolist())
     for group_codes in CONCEPT_GROUPS.values():
         codes.update(group_codes)
     return tuple(sorted(codes))
@@ -575,21 +576,28 @@ def main() -> None:
     elif not stocks_df.empty and "trade_value" in stocks_df.columns:
         market_total_value = float(stocks_df["trade_value"].sum())
 
-    # ── 計算 Money Flow ──
+    # ── 計算 Money Flow（即時，不需要歷史資料）──
     flow_df = compute_sector_money_flow(stocks_df, market_total_value, include_concept=True)
 
-    # ── 載入歷史資料 ──
-    tickers = _all_tickers(stocks_df)
-    hist_data   = load_historical_data(tickers, period="1y")
-    price_hist  = hist_data["price_hist"]
-    taiex_hist  = hist_data["taiex_hist"]
+    # ── Sidebar（在歷史資料載入前先渲染，確保頁面可互動）──
+    sector_list = flow_df["sector"].tolist() if not flow_df.empty else []
+    filters = render_sidebar(sector_list, intraday)
 
-    # ── 動能分析 ──
-    momentum_df      = compute_momentum_scores(price_hist.df, taiex_hist.df)
-    sector_momentum  = compute_sector_momentum(momentum_df, stocks_df) if not momentum_df.empty else pd.DataFrame()
+    # ── 載入概念股歷史資料（~15 支，約 5-10 秒）──
+    tickers    = _all_tickers(stocks_df)
+    hist_data  = load_historical_data(tickers, period="1y")
+    price_hist = hist_data["price_hist"]
+    taiex_hist = hist_data["taiex_hist"]
 
-    # ── 階段判斷 ──
-    stage_df = identify_sector_stages(price_hist.df, stocks_df)
+    # ── 動能分析（概念股層級）──
+    momentum_df     = compute_momentum_scores(price_hist.df, taiex_hist.df)
+    # 概念股的 stocks_df 子集（供 sector_momentum 使用）
+    concept_codes   = {c for codes in CONCEPT_GROUPS.values() for c in codes}
+    concept_stocks  = stocks_df[stocks_df["code"].isin(concept_codes)] if not stocks_df.empty else pd.DataFrame()
+    sector_momentum = compute_sector_momentum(momentum_df, concept_stocks) if not momentum_df.empty else pd.DataFrame()
+
+    # ── 階段判斷（概念股）──
+    stage_df = identify_sector_stages(price_hist.df, concept_stocks)
 
     # ── 歷史成交比重趨勢（用於 Bubble Chart X 軸）──
     flow_history_df = compute_sector_money_flow_history(price_hist.df, stocks_df, market_total_value)
@@ -606,10 +614,6 @@ def main() -> None:
         stocks_df=stocks_df,
         stage_df=stage_df,
     )
-
-    # ── Sidebar ──
-    sector_list = flow_df["sector"].tolist() if not flow_df.empty else []
-    filters = render_sidebar(sector_list, intraday)
 
     # ── Header ──
     render_header(taiex_hist.df, flow_df, anomalies, stocks_df)
