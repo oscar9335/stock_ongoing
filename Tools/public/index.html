@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>台股 K 線與成交股數</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <h1>台股 K 線與成交股數</h1>
+          <p id="subtitle">上市 / 上櫃官方資料，盤中量以整股與零股估算</p>
+        </div>
+        <div class="status-pill" id="marketStatus">待查詢</div>
+      </header>
+
+      <section class="controls">
+        <label class="field query-field">
+          <span>股票代號或名稱</span>
+          <input id="symbolInput" list="suggestions" value="2330" autocomplete="off" placeholder="例如 2330、台積電、M31">
+          <datalist id="suggestions"></datalist>
+        </label>
+
+        <label class="field">
+          <span>市場</span>
+          <select id="marketSelect">
+            <option value="auto">自動</option>
+            <option value="twse">上市</option>
+            <option value="tpex">上櫃</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>期間</span>
+          <select id="monthsSelect">
+            <option value="3">3 個月</option>
+            <option value="6" selected>6 個月</option>
+            <option value="12">12 個月</option>
+          </select>
+        </label>
+
+        <button id="loadButton" class="primary-button" type="button">查詢</button>
+      </section>
+
+      <section class="toggles" aria-label="圖表設定">
+        <label><input type="checkbox" id="realtimeToggle" checked> 併入盤中估算</label>
+        <label><input type="checkbox" id="oddLotToggle" checked> 加計盤中零股</label>
+        <label><input type="checkbox" class="ma-toggle" data-period="5" checked> MA5</label>
+        <label><input type="checkbox" class="ma-toggle" data-period="10" checked> MA10</label>
+        <label><input type="checkbox" class="ma-toggle" data-period="20" checked> MA20</label>
+        <label><input type="checkbox" class="ma-toggle" data-period="60"> MA60</label>
+        <label><input type="checkbox" class="vma-toggle" data-period="5"> 量均5</label>
+        <label><input type="checkbox" class="vma-toggle" data-period="20" checked> 量均20</label>
+      </section>
+
+      <section class="summary-grid" id="summaryGrid">
+        <div><span>收盤 / 現價</span><strong>-</strong></div>
+        <div><span>成交股數</span><strong>-</strong></div>
+        <div><span>資料日期</span><strong>-</strong></div>
+        <div><span>資料來源</span><strong>-</strong></div>
+      </section>
+
+      <section class="chart-panel">
+        <div class="chart-header">
+          <div>
+            <h2 id="chartTitle">請輸入股票代號或名稱</h2>
+            <p id="chartMeta">成交量單位：股</p>
+          </div>
+          <div id="legend" class="legend"></div>
+        </div>
+        <div class="canvas-wrap">
+          <canvas id="chartCanvas"></canvas>
+          <div id="tooltip" class="tooltip" hidden></div>
+        </div>
+      </section>
+
+      <section class="notes" id="notes"></section>
+
+      <section class="table-section">
+        <div class="table-header">
+          <h2>近期資料</h2>
+          <button id="downloadButton" type="button">下載 CSV</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>日期</th>
+                <th>開盤</th>
+                <th>最高</th>
+                <th>最低</th>
+                <th>收盤 / 現價</th>
+                <th>成交股數</th>
+                <th>來源</th>
+              </tr>
+            </thead>
+            <tbody id="dataBody">
+              <tr><td colspan="7">尚無資料</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
