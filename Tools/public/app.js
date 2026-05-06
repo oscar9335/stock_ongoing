@@ -2,6 +2,14 @@ const state = {
   payload: null,
   rows: [],
   hoverIndex: null,
+  viewStart: 0,
+  viewEnd: 0,
+  yZoom: 1,
+  isDragging: false,
+  dragStartX: 0,
+  dragStartViewStart: 0,
+  dragStartViewEnd: 0,
+  pointerId: null,
 };
 
 const colors = {
@@ -36,6 +44,11 @@ const els = {
   notes: document.getElementById("notes"),
   dataBody: document.getElementById("dataBody"),
   downloadButton: document.getElementById("downloadButton"),
+  xZoomInButton: document.getElementById("xZoomInButton"),
+  xZoomOutButton: document.getElementById("xZoomOutButton"),
+  yZoomInButton: document.getElementById("yZoomInButton"),
+  yZoomOutButton: document.getElementById("yZoomOutButton"),
+  resetViewButton: document.getElementById("resetViewButton"),
 };
 
 const ctx = els.canvas.getContext("2d");
@@ -56,6 +69,63 @@ function formatPrice(value) {
 function priceLabel(row, long = false) {
   if (row.isRealtime) return long ? "現價" : "現";
   return long ? "收盤" : "收";
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function resetView() {
+  const lastIndex = Math.max(0, state.rows.length - 1);
+  state.viewStart = 0;
+  state.viewEnd = lastIndex;
+  state.yZoom = 1;
+  state.hoverIndex = null;
+}
+
+function clampView() {
+  const count = state.rows.length;
+  if (!count) {
+    resetView();
+    return;
+  }
+  const minVisible = Math.min(12, count);
+  let visible = state.viewEnd - state.viewStart + 1;
+  visible = clamp(visible, minVisible, count);
+  if (visible >= count) {
+    state.viewStart = 0;
+    state.viewEnd = count - 1;
+    return;
+  }
+  const center = (state.viewStart + state.viewEnd) / 2;
+  state.viewStart = center - (visible - 1) / 2;
+  state.viewEnd = state.viewStart + visible - 1;
+  if (state.viewStart < 0) {
+    state.viewStart = 0;
+    state.viewEnd = visible - 1;
+  }
+  if (state.viewEnd > count - 1) {
+    state.viewEnd = count - 1;
+    state.viewStart = state.viewEnd - visible + 1;
+  }
+}
+
+function zoomX(scale, anchorRatio = 0.5) {
+  if (!state.rows.length) return;
+  const visible = state.viewEnd - state.viewStart + 1;
+  const targetVisible = clamp(visible * scale, Math.min(12, state.rows.length), state.rows.length);
+  const anchor = state.viewStart + (visible - 1) * anchorRatio;
+  state.viewStart = anchor - (anchor - state.viewStart) * (targetVisible / visible);
+  state.viewEnd = state.viewStart + targetVisible - 1;
+  clampView();
+  state.hoverIndex = null;
+  els.tooltip.hidden = true;
+  drawChart();
+}
+
+function zoomY(scale) {
+  state.yZoom = clamp(state.yZoom * scale, 0.35, 12);
+  drawChart();
 }
 
 function movingAverage(rows, field, period) {
@@ -86,16 +156,17 @@ function resizeCanvas() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
-function drawLine(points, xForIndex, yForValue, stroke) {
+function drawLine(points, xForIndex, yForValue, stroke, startIndex, endIndex) {
   ctx.save();
   ctx.strokeStyle = stroke;
   ctx.lineWidth = 1.8;
   ctx.beginPath();
   let started = false;
-  points.forEach((value, index) => {
+  for (let index = startIndex; index <= endIndex; index += 1) {
+    const value = points[index];
     if (value === null || value === undefined) {
       started = false;
-      return;
+      continue;
     }
     const x = xForIndex(index);
     const y = yForValue(value);
@@ -105,7 +176,7 @@ function drawLine(points, xForIndex, yForValue, stroke) {
     } else {
       ctx.lineTo(x, y);
     }
-  });
+  }
   ctx.stroke();
   ctx.restore();
 }
@@ -142,6 +213,12 @@ function drawChart() {
     return;
   }
 
+  clampView();
+  const startIndex = Math.max(0, Math.floor(state.viewStart));
+  const endIndex = Math.min(rows.length - 1, Math.ceil(state.viewEnd));
+  const visibleRows = rows.slice(startIndex, endIndex + 1);
+  const visibleCount = Math.max(1, state.viewEnd - state.viewStart + 1);
+  els.chartMeta.textContent = `成交量單位：股；資料筆數 ${rows.length}；顯示 ${rows[startIndex].date} ~ ${rows[endIndex].date}`;
   const margin = { left: 58, right: 72, top: 24, bottom: 32 };
   const gap = 22;
   const plotW = width - margin.left - margin.right;
@@ -151,27 +228,33 @@ function drawChart() {
   const volTop = priceBottom + gap;
   const volBottom = height - margin.bottom;
   const volH = volBottom - volTop;
-  const candleW = Math.max(2, Math.min(11, plotW / rows.length * 0.62));
-  const step = plotW / Math.max(1, rows.length);
-  const xForIndex = (index) => margin.left + step * index + step / 2;
+  const candleW = Math.max(2, Math.min(12, plotW / visibleCount * 0.62));
+  const step = plotW / visibleCount;
+  const xForIndex = (index) => margin.left + (index - state.viewStart) * step + step / 2;
 
   const maPeriods = selectedPeriods(".ma-toggle");
   const vmaPeriods = selectedPeriods(".vma-toggle");
   const closeMas = new Map(maPeriods.map((period) => [period, movingAverage(rows, "close", period)]));
   const volumeMas = new Map(vmaPeriods.map((period) => [period, movingAverage(rows, "volumeShares", period)]));
 
-  const priceValues = rows.flatMap((row) => [row.high, row.low]);
+  const priceValues = visibleRows.flatMap((row) => [row.high, row.low]);
   for (const values of closeMas.values()) {
-    values.forEach((value) => value !== null && priceValues.push(value));
+    for (let index = startIndex; index <= endIndex; index += 1) {
+      if (values[index] !== null) priceValues.push(values[index]);
+    }
   }
   let minPrice = Math.min(...priceValues);
   let maxPrice = Math.max(...priceValues);
   const padding = (maxPrice - minPrice || maxPrice * 0.02 || 1) * 0.08;
   minPrice -= padding;
   maxPrice += padding;
+  const priceCenter = (minPrice + maxPrice) / 2;
+  const priceRange = Math.max((maxPrice - minPrice) / state.yZoom, 1);
+  minPrice = priceCenter - priceRange / 2;
+  maxPrice = priceCenter + priceRange / 2;
   const yPrice = (value) => priceBottom - ((value - minPrice) / (maxPrice - minPrice)) * priceH;
 
-  const maxVolume = Math.max(...rows.map((row) => Number(row.volumeShares) || 0), 1);
+  const maxVolume = Math.max(...visibleRows.map((row) => Number(row.volumeShares) || 0), 1);
   const yVolume = (value) => volBottom - (value / maxVolume) * volH;
 
   ctx.save();
@@ -201,17 +284,19 @@ function drawChart() {
     ctx.fillText(formatNumber(tick), margin.left - 8, y);
   }
 
-  const dateEvery = Math.max(1, Math.ceil(rows.length / 6));
+  const dateEvery = Math.max(1, Math.ceil(visibleRows.length / 6));
   ctx.textBaseline = "top";
-  rows.forEach((row, index) => {
-    if (index % dateEvery !== 0 && index !== rows.length - 1) return;
+  for (let index = startIndex; index <= endIndex; index += 1) {
+    const row = rows[index];
+    if ((index - startIndex) % dateEvery !== 0 && index !== endIndex) continue;
     const x = xForIndex(index);
     ctx.textAlign = "center";
     ctx.fillText(row.date.slice(5), x, volBottom + 10);
-  });
+  }
   ctx.restore();
 
-  rows.forEach((row, index) => {
+  for (let index = startIndex; index <= endIndex; index += 1) {
+    const row = rows[index];
     const x = xForIndex(index);
     const isUp = row.close >= row.open;
     const color = row.isRealtime ? colors.realtime : isUp ? colors.up : colors.down;
@@ -235,12 +320,12 @@ function drawChart() {
     ctx.globalAlpha = 0.78;
     ctx.fillRect(x - candleW / 2, volTopY, candleW, Math.max(1, volBottom - volTopY));
     ctx.globalAlpha = 1;
-  });
+  }
 
-  closeMas.forEach((values, period) => drawLine(values, xForIndex, yPrice, colors[`ma${period}`] || colors.axis));
-  volumeMas.forEach((values, period) => drawLine(values, xForIndex, yVolume, colors[`vma${period}`] || colors.axis));
+  closeMas.forEach((values, period) => drawLine(values, xForIndex, yPrice, colors[`ma${period}`] || colors.axis, startIndex, endIndex));
+  volumeMas.forEach((values, period) => drawLine(values, xForIndex, yVolume, colors[`vma${period}`] || colors.axis, startIndex, endIndex));
 
-  if (state.hoverIndex !== null && rows[state.hoverIndex]) {
+  if (state.hoverIndex !== null && state.hoverIndex >= startIndex && state.hoverIndex <= endIndex && rows[state.hoverIndex]) {
     const row = rows[state.hoverIndex];
     const x = xForIndex(state.hoverIndex);
     ctx.save();
@@ -341,7 +426,7 @@ function updateNotes(payload) {
 function render(payload) {
   state.payload = payload;
   state.rows = payload.rows || [];
-  state.hoverIndex = null;
+  resetView();
   const marketName = payload.market === "twse" ? "上市" : "上櫃";
   els.marketStatus.textContent = marketName;
   els.chartTitle.textContent = `${payload.symbol} ${payload.name || ""}`.trim();
@@ -442,20 +527,90 @@ document.querySelectorAll(".ma-toggle,.vma-toggle").forEach((input) => {
   });
 });
 
-els.canvas.addEventListener("mousemove", (event) => {
+function updateHoverFromPoint(clientX) {
   if (!state.rows.length) return;
   const rect = els.canvas.getBoundingClientRect();
-  const x = event.clientX - rect.left;
+  const x = clientX - rect.left;
   const marginLeft = 58;
   const marginRight = 72;
   const plotW = rect.width - marginLeft - marginRight;
-  const step = plotW / Math.max(1, state.rows.length);
-  const index = Math.round((x - marginLeft - step / 2) / step);
-  state.hoverIndex = Math.max(0, Math.min(state.rows.length - 1, index));
+  if (x < marginLeft || x > rect.width - marginRight) {
+    state.hoverIndex = null;
+    els.tooltip.hidden = true;
+    drawChart();
+    return;
+  }
+  const visible = state.viewEnd - state.viewStart + 1;
+  const step = plotW / Math.max(1, visible);
+  const index = Math.round(state.viewStart + (x - marginLeft - step / 2) / step);
+  state.hoverIndex = clamp(index, Math.floor(state.viewStart), Math.ceil(state.viewEnd));
+  drawChart();
+}
+
+els.canvas.addEventListener("pointerdown", (event) => {
+  if (!state.rows.length) return;
+  state.isDragging = true;
+  state.pointerId = event.pointerId;
+  state.dragStartX = event.clientX;
+  state.dragStartViewStart = state.viewStart;
+  state.dragStartViewEnd = state.viewEnd;
+  els.canvas.classList.add("dragging");
+  els.canvas.setPointerCapture(event.pointerId);
+});
+
+els.canvas.addEventListener("pointermove", (event) => {
+  if (!state.rows.length) return;
+  if (state.isDragging && state.pointerId === event.pointerId) {
+    const rect = els.canvas.getBoundingClientRect();
+    const plotW = rect.width - 58 - 72;
+    const visible = state.dragStartViewEnd - state.dragStartViewStart + 1;
+    const deltaIndex = -((event.clientX - state.dragStartX) / Math.max(1, plotW)) * visible;
+    state.viewStart = state.dragStartViewStart + deltaIndex;
+    state.viewEnd = state.dragStartViewEnd + deltaIndex;
+    clampView();
+    state.hoverIndex = null;
+    els.tooltip.hidden = true;
+    drawChart();
+    return;
+  }
+  updateHoverFromPoint(event.clientX);
+});
+
+function endDrag(event) {
+  if (state.pointerId !== null && event.pointerId !== state.pointerId) return;
+  state.isDragging = false;
+  state.pointerId = null;
+  els.canvas.classList.remove("dragging");
+}
+
+els.canvas.addEventListener("pointerup", endDrag);
+els.canvas.addEventListener("pointercancel", endDrag);
+
+els.canvas.addEventListener("wheel", (event) => {
+  if (!state.rows.length) return;
+  event.preventDefault();
+  if (event.shiftKey) {
+    zoomY(event.deltaY < 0 ? 1.18 : 1 / 1.18);
+    return;
+  }
+  const rect = els.canvas.getBoundingClientRect();
+  const anchorRatio = clamp((event.clientX - rect.left - 58) / Math.max(1, rect.width - 58 - 72), 0, 1);
+  zoomX(event.deltaY < 0 ? 0.78 : 1 / 0.78, anchorRatio);
+}, { passive: false });
+
+els.canvas.addEventListener("mouseleave", () => {
+  if (state.isDragging) return;
+  state.hoverIndex = null;
+  els.tooltip.hidden = true;
   drawChart();
 });
-els.canvas.addEventListener("mouseleave", () => {
-  state.hoverIndex = null;
+
+els.xZoomInButton.addEventListener("click", () => zoomX(0.72));
+els.xZoomOutButton.addEventListener("click", () => zoomX(1 / 0.72));
+els.yZoomInButton.addEventListener("click", () => zoomY(1.2));
+els.yZoomOutButton.addEventListener("click", () => zoomY(1 / 1.2));
+els.resetViewButton.addEventListener("click", () => {
+  resetView();
   els.tooltip.hidden = true;
   drawChart();
 });

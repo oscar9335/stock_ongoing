@@ -218,6 +218,19 @@ button:hover {
   margin-bottom: 10px;
 }
 
+.chart-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.chart-tools button {
+  min-width: 46px;
+  height: 34px;
+  padding: 0 10px;
+}
+
 .legend {
   display: flex;
   flex-wrap: wrap;
@@ -254,6 +267,13 @@ canvas {
   border: 1px solid var(--line);
   border-radius: 6px;
   background: #fff;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+canvas.dragging {
+  cursor: grabbing;
 }
 
 .tooltip {

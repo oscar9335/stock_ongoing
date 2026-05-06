@@ -71,7 +71,7 @@ def clamp_months(raw: str | None) -> int:
         months = int(raw or "6")
     except ValueError:
         months = 6
-    return max(1, min(months, 24))
+    return max(1, min(months, 60))
 
 
 def range_for_months(months: int) -> Range:
@@ -433,7 +433,7 @@ def parse_tpex_month_row(fields: list[str], raw: list[Any]) -> dict[str, Any] | 
     high = parse_number(tpex_value_by_field(fields, raw, "最高"))
     low = parse_number(tpex_value_by_field(fields, raw, "最低"))
     close = parse_number(tpex_value_by_field(fields, raw, "收盤"))
-    volume_lots = parse_int(tpex_value_by_field(fields, raw, "成交張數"))
+    volume_lots = parse_int(tpex_value_by_field(fields, raw, "成交張數", "成交仟股"))
     if not row_date or None in {open_price, high, low, close, volume_lots}:
         return None
     amount_thousand = parse_int(tpex_value_by_field(fields, raw, "成交仟元"))
@@ -519,7 +519,7 @@ def apply_tpex_latest_exact_volume(symbol: str, rows: list[dict[str, Any]]) -> b
 
 
 def fetch_tpex_history(symbol: str, months: int) -> dict[str, Any]:
-    capped_months = min(months, 12)
+    capped_months = min(months, 60)
     rng = range_for_months(capped_months)
     rows: list[dict[str, Any]] = []
     name = ""
@@ -544,12 +544,12 @@ def fetch_tpex_history(symbol: str, months: int) -> dict[str, Any]:
         latest_exact = False
 
     notes = [
-        "TPEx 個股歷史頁提供「成交張數」，本系統換算為成交股數（成交張數 * 1000）；最近一個 TPEx OpenAPI 盤後交易日若可取得，會改用 OpenAPI 的精準 TradingShares。",
+        "TPEx 個股歷史頁提供「成交張數」或舊欄位「成交仟股」，本系統換算為成交股數（千股單位 * 1000）；最近一個 TPEx OpenAPI 盤後交易日若可取得，會改用 OpenAPI 的精準 TradingShares。",
     ]
     if latest_exact:
         notes.append("最近一個 TPEx OpenAPI 盤後交易日已使用精準成交股數。")
     if months > capped_months:
-        notes.append("目前上櫃歷史查詢先限制 12 個月，避免一次對官方端點發出過多請求。")
+        notes.append("目前上櫃歷史查詢最多 5 年。")
     notes.extend(source_notes)
 
     return {

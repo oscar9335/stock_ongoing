@@ -38,6 +38,9 @@
             <option value="3">3 個月</option>
             <option value="6" selected>6 個月</option>
             <option value="12">12 個月</option>
+            <option value="24">2 年</option>
+            <option value="36">3 年</option>
+            <option value="60">5 年</option>
           </select>
         </label>
 
@@ -69,6 +72,13 @@
             <p id="chartMeta">成交量單位：股</p>
           </div>
           <div id="legend" class="legend"></div>
+        </div>
+        <div class="chart-tools" aria-label="圖表縮放">
+          <button id="xZoomInButton" type="button" title="放大 X 軸">X+</button>
+          <button id="xZoomOutButton" type="button" title="縮小 X 軸">X-</button>
+          <button id="yZoomInButton" type="button" title="放大 Y 軸">Y+</button>
+          <button id="yZoomOutButton" type="button" title="縮小 Y 軸">Y-</button>
+          <button id="resetViewButton" type="button" title="重設圖表">重設</button>
         </div>
         <div class="canvas-wrap">
           <canvas id="chartCanvas"></canvas>
